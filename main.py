@@ -1,0 +1,307 @@
+import pygame
+import random
+import sys
+import os
+
+pygame.init()
+pygame.mixer.init()
+
+# ---------------- WINDOW ----------------
+WIDTH = 800
+HEIGHT = 600
+
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Fruit Catcher - Arcade Game")
+
+clock = pygame.time.Clock()
+
+# ---------------- COLORS ----------------
+WHITE = (255, 255, 255)
+BLACK = (30, 30, 40)
+BLUE = (50, 130, 220)
+GREEN = (50, 190, 80)
+RED = (230, 50, 50)
+GOLD = (255, 190, 0)
+PURPLE = (130, 70, 180)
+SKY = (210, 235, 255)
+
+# ---------------- FONTS ----------------
+title_font = pygame.font.SysFont("arial", 55, bold=True)
+font = pygame.font.SysFont("arial", 28)
+small_font = pygame.font.SysFont("arial", 21)
+
+# ---------------- ASSETS ----------------
+ASSET_DIR = "assets"
+
+def load_sound(filename):
+    path = os.path.join(ASSET_DIR, filename)
+    if os.path.exists(path):
+        try:
+            return pygame.mixer.Sound(path)
+        except pygame.error:
+            return None
+    return None
+
+collect_sound = load_sound("collect.wav")
+bomb_sound = load_sound("bomb.wav")
+
+music_path = os.path.join(ASSET_DIR, "background_music.mp3")
+
+if os.path.exists(music_path):
+    try:
+        pygame.mixer.music.load(music_path)
+        pygame.mixer.music.play(-1)
+    except pygame.error:
+        pass
+
+# ---------------- GAME VARIABLES ----------------
+player = pygame.Rect(350, 520, 100, 30)
+
+player_speed = 7
+score = 0
+lives = 3
+game_time = 60
+
+start_ticks = 0
+last_difficulty = 0
+fruit_speed = 4
+
+objects = []
+
+# ---------------- OBJECT CREATION ----------------
+def create_object():
+    chance = random.random()
+
+    if chance < 0.65:
+        obj_type = "fruit"
+    elif chance < 0.85:
+        obj_type = "golden"
+    else:
+        obj_type = "bomb"
+
+    obj = {
+        "rect": pygame.Rect(
+            random.randint(20, WIDTH - 50),
+            -40,
+            35,
+            35
+        ),
+        "type": obj_type
+    }
+
+    return obj
+
+# ---------------- RESET GAME ----------------
+def reset_game():
+    global score, lives, game_time
+    global fruit_speed, objects, start_ticks
+    global last_difficulty, player
+
+    score = 0
+    lives = 3
+    game_time = 60
+    fruit_speed = 4
+    objects = []
+
+    player.x = 350
+    start_ticks = pygame.time.get_ticks()
+    last_difficulty = 0
+
+    for i in range(4):
+        objects.append(create_object())
+
+# ---------------- DRAW TEXT ----------------
+def draw_text(text, font_style, color, x, y):
+    image = font_style.render(text, True, color)
+    screen.blit(image, (x, y))
+
+# ---------------- START SCREEN ----------------
+def start_screen():
+    screen.fill(SKY)
+
+    title = title_font.render("FRUIT CATCHER", True, PURPLE)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 100))
+
+    draw_text("Catch fruits and avoid bombs!", font, BLACK, 215, 210)
+    draw_text("LEFT / RIGHT Arrow - Move Basket", small_font, BLACK, 250, 270)
+    draw_text("Normal Fruit = +10 Points", small_font, GREEN, 280, 310)
+    draw_text("Golden Apple = +30 Points", small_font, GOLD, 270, 345)
+    draw_text("Bomb = Lose 1 Life", small_font, RED, 295, 380)
+
+    draw_text("Press ENTER to START", font, BLUE, 270, 460)
+
+    pygame.display.update()
+
+# ---------------- GAME OVER SCREEN ----------------
+def game_over_screen():
+    screen.fill((245, 225, 225))
+
+    title = title_font.render("GAME OVER", True, RED)
+    screen.blit(title, (WIDTH // 2 - title.get_width() // 2, 150))
+
+    draw_text("Final Score: " + str(score), font, BLACK, 315, 260)
+    draw_text("Press R to Restart", font, BLUE, 285, 340)
+    draw_text("Press ESC to Exit", small_font, BLACK, 315, 400)
+
+    pygame.display.update()
+
+# ---------------- MAIN GAME ----------------
+def play_game():
+
+    global score, lives, fruit_speed
+
+    screen.fill(SKY)
+
+    # Timer
+    elapsed = (pygame.time.get_ticks() - start_ticks) // 1000
+    remaining_time = max(0, game_time - elapsed)
+
+    # Difficulty increase every 15 seconds
+    difficulty_level = elapsed // 15
+
+    if difficulty_level > last_difficulty:
+        fruit_speed += 1
+        for obj in objects:
+            obj["rect"].y += 0
+        globals()["last_difficulty"] = difficulty_level
+
+    # Player movement
+    keys = pygame.key.get_pressed()
+
+    if keys[pygame.K_LEFT]:
+        player.x -= player_speed
+
+    if keys[pygame.K_RIGHT]:
+        player.x += player_speed
+
+    player.x = max(0, min(WIDTH - player.width, player.x))
+
+    # Add new objects
+    if len(objects) < 5 + difficulty_level:
+        objects.append(create_object())
+
+    # Draw player
+    pygame.draw.rect(screen, BLUE, player, border_radius=10)
+    pygame.draw.rect(screen, PURPLE, (player.x + 10, player.y - 8, 80, 10))
+
+    # Move and draw objects
+    for obj in objects[:]:
+
+        rect = obj["rect"]
+        rect.y += fruit_speed
+
+        if obj["type"] == "fruit":
+            pygame.draw.circle(screen, GREEN, rect.center, 17)
+            pygame.draw.line(
+                screen, BLACK,
+                (rect.centerx, rect.top + 3),
+                (rect.centerx + 8, rect.top - 5), 3
+            )
+
+        elif obj["type"] == "golden":
+            pygame.draw.circle(screen, GOLD, rect.center, 18)
+            pygame.draw.circle(screen, WHITE, rect.center, 7)
+
+        elif obj["type"] == "bomb":
+            pygame.draw.circle(screen, BLACK, rect.center, 17)
+            pygame.draw.circle(screen, RED, rect.center, 5)
+
+        # Collision detection
+        if player.colliderect(rect):
+
+            if obj["type"] == "fruit":
+                score += 10
+                if collect_sound:
+                    collect_sound.play()
+
+            elif obj["type"] == "golden":
+                score += 30
+                if collect_sound:
+                    collect_sound.play()
+
+            elif obj["type"] == "bomb":
+                lives -= 1
+                if bomb_sound:
+                    bomb_sound.play()
+
+            objects.remove(obj)
+
+        # Remove objects outside screen
+        elif rect.top > HEIGHT:
+            objects.remove(obj)
+
+    # Display score, lives and timer
+    draw_text("Score: " + str(score), font, BLACK, 20, 15)
+    draw_text("Lives: " + str(lives), font, RED, 330, 15)
+    draw_text("Time: " + str(remaining_time), font, BLACK, 650, 15)
+
+    draw_text("P = Pause", small_font, BLACK, 20, 560)
+
+    pygame.display.update()
+
+    # Game over condition
+    if lives <= 0 or remaining_time <= 0:
+        return False
+
+    return True
+
+# ---------------- GAME STATES ----------------
+START = "start"
+PLAYING = "playing"
+PAUSED = "paused"
+GAME_OVER = "game_over"
+
+state = START
+
+# ---------------- MAIN LOOP ----------------
+running = True
+
+while running:
+
+    for event in pygame.event.get():
+
+        if event.type == pygame.QUIT:
+            running = False
+
+        if event.type == pygame.KEYDOWN:
+
+            if state == START and event.key == pygame.K_RETURN:
+                reset_game()
+                state = PLAYING
+
+            elif state == PLAYING and event.key == pygame.K_p:
+                state = PAUSED
+
+            elif state == PAUSED and event.key == pygame.K_p:
+                state = PLAYING
+
+            elif state == GAME_OVER:
+
+                if event.key == pygame.K_r:
+                    reset_game()
+                    state = PLAYING
+
+                elif event.key == pygame.K_ESCAPE:
+                    running = False
+
+    if state == START:
+        start_screen()
+
+    elif state == PLAYING:
+
+        if not play_game():
+            state = GAME_OVER
+
+    elif state == PAUSED:
+        screen.fill(SKY)
+        draw_text("GAME PAUSED", title_font, PURPLE, 210, 230)
+        draw_text("Press P to Resume", font, BLACK, 280, 320)
+        pygame.display.update()
+
+    elif state == GAME_OVER:
+        game_over_screen()
+
+    clock.tick(60)
+
+pygame.quit()
+sys.exit()
